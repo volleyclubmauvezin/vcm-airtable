@@ -21,17 +21,24 @@ doc technique des scripts eux-mêmes.
 ## Utilisation
 
 ```bash
-# 1) Construire le schéma (17 tables, champs, relations, formules) — idempotent, peut être relancé sans risque
+# 1) Construire le schéma (17 tables, champs, relations, formules, rollups) — idempotent, peut être relancé sans risque
 node scripts/provision.js
 
-# 2) Vérifier dans Airtable les 1-2 champs listés comme "à ajouter à la main" en fin d'exécution
-#    (rollup Matériel.Quantité dispo — voir GUIDE_VCM_AIRTABLE.md)
-
-# 3) Importer les membres actuels — dry-run d'abord (n'écrit rien, affiche juste ce qui serait fait)
+# 2) Importer les membres actuels — dry-run d'abord (n'écrit rien, affiche juste ce qui serait fait)
 python scripts/import_membres.py
 # puis, une fois vérifié :
 python scripts/import_membres.py --write
 ```
+
+## Limites connues de l'API Airtable (rencontrées en construisant ce script)
+
+- **Pas de champ `autoNumber` créable par API** (ni à la création de table, ni après) — d'où
+  l'usage de champs "Référence" (texte libre) comme primaire sur les tables de jonction.
+- **Pas de suppression de champ par API** (`DELETE .../fields/{id}` renvoie 404) — un champ
+  mal créé doit être renommé/réutilisé, pas supprimé, sauf à la main dans l'UI.
+- **Pas de filtre sur les champs rollup par API** (possible dans l'UI) — contournement : un
+  champ formule intermédiaire dans la table liée, zéroté pour les lignes à exclure, puis un
+  rollup `SUM(values)` simple dessus (voir `Matériel.Quantité dispo` dans le schéma).
 
 ## Réutiliser pour un autre club
 

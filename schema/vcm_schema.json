@@ -5,9 +5,9 @@
     "1) Les champs 'Heure début'/'Heure fin' (type 'time' dans le texte original) sont modélisés en singleLineText (format libre HH:MM) : Airtable n'a pas de type de champ 'heure seule' exposé par l'API publique.",
     "2) Le champ 'KPI (likes, commentaires, partages)' de Publications est éclaté en 3 champs number distincts (Likes, Commentaires, Partages) plutôt qu'un seul champ.",
     "3) La relation 'Membres > Factures/transactions (link to Transactions)' mentionnée dans le texte original n'est pas créée : la table Transactions modélise le payeur en texte libre ('Bénéficiaire / Payeur'), pas en lien vers Membres — incohérence mineure de la spec d'origine, résolue en ne créant pas ce lien.",
-    "4) Matériel.'Quantité dispo' (= quantité totale - sorties non rendues) N'EST PAS créé automatiquement : c'est une agrégation cross-table (rollup sur Mouvements matériel filtré par type) trop fragile à générer par API de façon fiable. À ajouter à la main dans l'UI Airtable (voir GUIDE_VCM_AIRTABLE.md) — 2 minutes, un rollup 'Sorties non rendues' + un champ formule qui soustrait.",
-    "5) 'ID Membre (autonumber)' etc. sont conservés comme champs secondaires autoNumber ; le champ primaire (affiché en 1ère colonne) de chaque table est un champ texte plus lisible (Nom, Titre, Référence...) quand un tel champ naturel existe à la création de la table — l'API Airtable ne permet pas de changer le champ primaire après coup.",
-    "6) Pour les tables purement de jonction sans champ texte naturel disponible à la création (Adhésions, Présences, Créneaux, Mouvements matériel), le champ primaire est un autoNumber 'ID ...'.",
+    "4) Matériel.'Quantité dispo' EST créé automatiquement, mais pas comme un rollup filtré direct : l'API Airtable ne supporte pas de filtre sur les champs rollup. À la place, un champ formule intermédiaire 'Quantité perdue' est créé sur Mouvements matériel (0 sauf si Type mouvement = Perte/Casse/Mise au rebut), puis un rollup SUM sans filtre sur ce champ (Matériel.'Perdu/Cassé'), puis la formule finale {Quantité totale} - {Perdu/Cassé}. D'où les catégories de schéma 'rollupFields' et 'postRollupFormulaFields', traitées en étapes 5-6 de provision.js, après tous les formulaFields/lookupFields normaux.",
+    "5) Le type de champ 'autoNumber' (ex. 'ID Membre (autonumber)' dans le texte d'origine) N'EST PAS créable via l'API publique Airtable (testé : erreur 422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE, aussi bien à la création de table qu'en ajout de champ après coup — c'est un type réservé à l'UI). Tous les champs 'ID ...' de la spec d'origine sont donc supprimés du schéma ; le numéro de ligne visible dans la grille Airtable en tient déjà lieu.",
+    "6) Pour les tables purement de jonction sans champ texte naturel disponible à la création (Adhésions, Présences, Créneaux, Transactions, Mouvements matériel), le champ primaire est un simple singleLineText 'Référence' (libre, optionnel). Un champ formule 'Libellé' plus lisible est ajouté ensuite (étape 4, une fois les liens créés) ; comme l'API ne permet pas de changer le champ primaire après coup, ce 'Libellé' n'est pas techniquement le champ primaire mais peut être glissé en première colonne visible à la main dans une vue si souhaité.",
     "Ordre de construction attendu par provision.js : 1) tables + champs de base + champs select, 2) champs de lien (linkFields, avec renommage du champ inverse auto-généré côté table liée), 3) champs formule/lookup (formulaFields/lookupFields, qui référencent des champs de lien donc créés en dernier)."
   ],
   "tables": [
@@ -15,7 +15,6 @@
       "name": "Membres",
       "primaryField": { "name": "Nom", "type": "singleLineText" },
       "fields": [
-        { "name": "ID Membre", "type": "autoNumber" },
         { "name": "Prénom", "type": "singleLineText" },
         { "name": "Date de naissance", "type": "date", "options": { "dateFormat": { "name": "european" } } },
         { "name": "Lieu de naissance", "type": "singleLineText" },
@@ -40,7 +39,7 @@
     },
     {
       "name": "Adhésions",
-      "primaryField": { "name": "ID Adhésion", "type": "autoNumber" },
+      "primaryField": { "name": "Référence", "type": "singleLineText" },
       "fields": [
         { "name": "Saison", "type": "singleSelect", "options": { "choices": [ {"name": "2025/2026"}, {"name": "2026/2027"}, {"name": "2027/2028"} ] } },
         { "name": "Adhésion Volley Club Mauvezin", "type": "singleSelect", "options": { "choices": [ {"name": "À faire"}, {"name": "En cours"}, {"name": "Validée"}, {"name": "Expirée"} ] } },
@@ -58,7 +57,8 @@
       ],
       "formulaFields": [
         { "name": "Total dû (€)", "type": "formula", "options": { "formula": "{Montant cotisation Club (€)} + {Montant Foyer Rural (€)}" } },
-        { "name": "Statut global", "type": "formula", "options": { "formula": "IF({Adhésion Volley Club Mauvezin} = \"Validée\", IF(OR({Adhésion Foyer Rural} = \"\", {Adhésion Foyer Rural} = \"Validée\"), \"OK\", \"À régulariser\"), \"À régulariser\")" } }
+        { "name": "Statut global", "type": "formula", "options": { "formula": "IF({Adhésion Volley Club Mauvezin} = \"Validée\", IF(OR({Adhésion Foyer Rural} = \"\", {Adhésion Foyer Rural} = \"Validée\"), \"OK\", \"À régulariser\"), \"À régulariser\")" } },
+        { "name": "Libellé", "type": "formula", "options": { "formula": "{Membre} & \" — \" & {Saison}" } }
       ]
     },
     {
@@ -85,7 +85,7 @@
     },
     {
       "name": "Présences",
-      "primaryField": { "name": "ID Présence", "type": "autoNumber" },
+      "primaryField": { "name": "Référence", "type": "singleLineText" },
       "fields": [
         { "name": "Statut réponse", "type": "singleSelect", "options": { "choices": [ {"name": "Invité"}, {"name": "Confirmé"}, {"name": "Peut-être"}, {"name": "Refusé"}, {"name": "Non répondu"} ] } },
         { "name": "Date réponse", "type": "dateTime", "options": { "dateFormat": { "name": "european" }, "timeFormat": { "name": "24hour" }, "timeZone": "client" } },
@@ -96,6 +96,9 @@
       "linkFields": [
         { "name": "Événement", "linkedTable": "Événements", "inverseName": "Présences" },
         { "name": "Membre", "linkedTable": "Membres", "inverseName": "Présences" }
+      ],
+      "formulaFields": [
+        { "name": "Libellé", "type": "formula", "options": { "formula": "{Membre} & \" — \" & {Événement}" } }
       ]
     },
     {
@@ -141,7 +144,7 @@
     },
     {
       "name": "Créneaux",
-      "primaryField": { "name": "ID Créneau", "type": "autoNumber" },
+      "primaryField": { "name": "Référence", "type": "singleLineText" },
       "fields": [
         { "name": "Jour", "type": "singleSelect", "options": { "choices": [ {"name": "Lundi"}, {"name": "Mardi"}, {"name": "Mercredi"}, {"name": "Jeudi"}, {"name": "Vendredi"}, {"name": "Samedi"}, {"name": "Dimanche"} ] } },
         { "name": "Heure début", "type": "singleLineText" },
@@ -152,6 +155,9 @@
       "linkFields": [
         { "name": "Groupe", "linkedTable": "Groupes", "inverseName": "Créneaux" },
         { "name": "Lieu", "linkedTable": "Lieux", "inverseName": "Créneaux" }
+      ],
+      "formulaFields": [
+        { "name": "Libellé", "type": "formula", "options": { "formula": "{Jour} & \" \" & {Heure début} & \"-\" & {Heure fin} & \" — \" & {Groupe}" } }
       ]
     },
     {
@@ -218,7 +224,7 @@
     },
     {
       "name": "Transactions",
-      "primaryField": { "name": "ID Transaction", "type": "autoNumber" },
+      "primaryField": { "name": "Référence", "type": "singleLineText" },
       "fields": [
         { "name": "Date", "type": "date", "options": { "dateFormat": { "name": "european" } } },
         { "name": "Type", "type": "singleSelect", "options": { "choices": [ {"name": "Dépense"}, {"name": "Recette"} ] } },
@@ -236,7 +242,8 @@
         { "name": "Événement", "linkedTable": "Événements", "inverseName": "Transactions" }
       ],
       "formulaFields": [
-        { "name": "Saison", "type": "formula", "options": { "formula": "IF(MONTH({Date}) >= 9, YEAR({Date}) & \"/\" & (YEAR({Date}) + 1), (YEAR({Date}) - 1) & \"/\" & YEAR({Date}))" } }
+        { "name": "Saison", "type": "formula", "options": { "formula": "IF(MONTH({Date}) >= 9, YEAR({Date}) & \"/\" & (YEAR({Date}) + 1), (YEAR({Date}) - 1) & \"/\" & YEAR({Date}))" } },
+        { "name": "Libellé", "type": "formula", "options": { "formula": "{Date} & \" — \" & {Catégorie} & \" — \" & {Montant (€)} & \"€\"" } }
       ]
     },
     {
@@ -284,13 +291,16 @@
         { "name": "Notes", "type": "multilineText" }
       ],
       "linkFields": [],
-      "manualFields": [
-        { "name": "Quantité dispo", "reason": "= Quantité totale - sorties non rendues. Nécessite un rollup sur Mouvements matériel (somme des quantités où Type mouvement != Retour) + un champ formule qui soustrait. Voir GUIDE_VCM_AIRTABLE.md." }
+      "rollupFields": [
+        { "name": "Perdu/Cassé", "sourceLinkField": "Mouvements matériel", "sourceField": "Quantité perdue", "formula": "SUM(values)" }
+      ],
+      "postRollupFormulaFields": [
+        { "name": "Quantité dispo", "type": "formula", "options": { "formula": "{Quantité totale} - {Perdu/Cassé}" } }
       ]
     },
     {
       "name": "Mouvements matériel",
-      "primaryField": { "name": "ID Mouvement", "type": "autoNumber" },
+      "primaryField": { "name": "Référence", "type": "singleLineText" },
       "fields": [
         { "name": "Date", "type": "dateTime", "options": { "dateFormat": { "name": "european" }, "timeFormat": { "name": "24hour" }, "timeZone": "client" } },
         { "name": "Type mouvement", "type": "singleSelect", "options": { "choices": [ {"name": "Prêt"}, {"name": "Retour"}, {"name": "Perte"}, {"name": "Casse"}, {"name": "Achat"}, {"name": "Mise au rebut"} ] } },
@@ -302,6 +312,10 @@
         { "name": "Matériel", "linkedTable": "Matériel", "inverseName": "Mouvements matériel" },
         { "name": "Membre concerné", "linkedTable": "Membres", "inverseName": "Mouvements matériel" },
         { "name": "Événement", "linkedTable": "Événements", "inverseName": "Mouvements matériel" }
+      ],
+      "formulaFields": [
+        { "name": "Libellé", "type": "formula", "options": { "formula": "{Type mouvement} & \" — \" & {Matériel} & \" — \" & {Date}" } },
+        { "name": "Quantité perdue", "type": "formula", "options": { "formula": "IF(OR({Type mouvement} = \"Perte\", {Type mouvement} = \"Casse\", {Type mouvement} = \"Mise au rebut\"), {Quantité}, 0)" } }
       ]
     }
   ]

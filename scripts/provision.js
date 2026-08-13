@@ -122,10 +122,10 @@ async function main() {
     fs.readFileSync(path.join(__dirname, "..", "schema", "vcm_schema.json"), "utf8")
   );
 
-  console.log("Étape 1/4 — Lecture du schéma existant sur Airtable...");
+  console.log("Étape 1/6 — Lecture du schéma existant sur Airtable...");
   let live = await getSchema();
 
-  console.log("\nÉtape 2/4 — Création des tables et champs de base...");
+  console.log("\nÉtape 2/6 — Création des tables et champs de base...");
   for (const table of schemaSpec.tables) {
     if (live[table.name]) {
       console.log(`  "${table.name}" existe déjà, on passe.`);
@@ -139,7 +139,7 @@ async function main() {
   }
   live = await getSchema();
 
-  console.log("\nÉtape 3/4 — Création des champs de lien (avec renommage du champ inverse)...");
+  console.log("\nÉtape 3/6 — Création des champs de lien (avec renommage du champ inverse)...");
   for (const table of schemaSpec.tables) {
     const tableInfo = live[table.name];
     if (!tableInfo) {
@@ -186,7 +186,7 @@ async function main() {
   }
   live = await getSchema();
 
-  console.log("\nÉtape 4/4 — Création des champs formule et lookup...");
+  console.log("\nÉtape 4/6 — Création des champs formule et lookup...");
   for (const table of schemaSpec.tables) {
     const tableInfo = live[table.name];
     if (!tableInfo) continue;
@@ -237,6 +237,63 @@ async function main() {
         });
       } catch (e) {
         console.error(`  Échec création lookup ${table.name}.${lk.name}: ${e.message}`);
+      }
+    }
+  }
+
+  live = await getSchema();
+
+  console.log("\nÉtape 5/6 — Création des champs rollup...");
+  // Note : l'API Airtable ne permet pas de filtrer un rollup (contrairement à l'UI). Pour un
+  // rollup "conditionnel", le schéma doit prévoir un champ formule intermédiaire dans la table
+  // liée (déjà zéroté pour les lignes à exclure) et faire un SUM(values) simple dessus ici.
+  for (const table of schemaSpec.tables) {
+    const tableInfo = live[table.name];
+    if (!tableInfo) continue;
+    for (const rf of table.rollupFields || []) {
+      if (tableInfo.fields[rf.name]) {
+        console.log(`  ${table.name}.${rf.name} existe déjà, on passe.`);
+        continue;
+      }
+      const linkFieldId = tableInfo.fields[rf.sourceLinkField];
+      const linkSpec = (table.linkFields || []).find((l) => l.name === rf.sourceLinkField);
+      const linkedTableInfo = linkSpec && live[linkSpec.linkedTable];
+      const sourceFieldId = linkedTableInfo && linkedTableInfo.fields[rf.sourceField];
+      if (!linkFieldId || !sourceFieldId) {
+        console.error(
+          `  Impossible de créer le rollup ${table.name}.${rf.name} : champ de lien ou champ ` +
+            `source introuvable ("${rf.sourceLinkField}" / "${rf.sourceField}").`
+        );
+        continue;
+      }
+      try {
+        console.log(`  ${table.name}.${rf.name} (rollup)`);
+        await createField(tableInfo.id, {
+          name: rf.name,
+          type: "rollup",
+          options: { recordLinkFieldId: linkFieldId, fieldIdInLinkedTable: sourceFieldId, formula: rf.formula },
+        });
+      } catch (e) {
+        console.error(`  Échec création rollup ${table.name}.${rf.name}: ${e.message}`);
+      }
+    }
+  }
+  live = await getSchema();
+
+  console.log("\nÉtape 6/6 — Création des champs formule dépendant d'un rollup...");
+  for (const table of schemaSpec.tables) {
+    const tableInfo = live[table.name];
+    if (!tableInfo) continue;
+    for (const f of table.postRollupFormulaFields || []) {
+      if (tableInfo.fields[f.name]) {
+        console.log(`  ${table.name}.${f.name} existe déjà, on passe.`);
+        continue;
+      }
+      try {
+        console.log(`  ${table.name}.${f.name} (formule post-rollup)`);
+        await createField(tableInfo.id, { name: f.name, type: f.type, options: f.options });
+      } catch (e) {
+        console.error(`  Échec création formule ${table.name}.${f.name}: ${e.message}`);
       }
     }
   }
