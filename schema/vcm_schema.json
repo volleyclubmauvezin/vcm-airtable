@@ -1,0 +1,308 @@
+{
+  "_notes": [
+    "Traduction en JSON de la spec originale (docx 'Crée une application Airtable nommée', gidx 176, décembre 2025).",
+    "Simplifications assumées par rapport au texte original, à connaître avant de lancer le provisioning :",
+    "1) Les champs 'Heure début'/'Heure fin' (type 'time' dans le texte original) sont modélisés en singleLineText (format libre HH:MM) : Airtable n'a pas de type de champ 'heure seule' exposé par l'API publique.",
+    "2) Le champ 'KPI (likes, commentaires, partages)' de Publications est éclaté en 3 champs number distincts (Likes, Commentaires, Partages) plutôt qu'un seul champ.",
+    "3) La relation 'Membres > Factures/transactions (link to Transactions)' mentionnée dans le texte original n'est pas créée : la table Transactions modélise le payeur en texte libre ('Bénéficiaire / Payeur'), pas en lien vers Membres — incohérence mineure de la spec d'origine, résolue en ne créant pas ce lien.",
+    "4) Matériel.'Quantité dispo' (= quantité totale - sorties non rendues) N'EST PAS créé automatiquement : c'est une agrégation cross-table (rollup sur Mouvements matériel filtré par type) trop fragile à générer par API de façon fiable. À ajouter à la main dans l'UI Airtable (voir GUIDE_VCM_AIRTABLE.md) — 2 minutes, un rollup 'Sorties non rendues' + un champ formule qui soustrait.",
+    "5) 'ID Membre (autonumber)' etc. sont conservés comme champs secondaires autoNumber ; le champ primaire (affiché en 1ère colonne) de chaque table est un champ texte plus lisible (Nom, Titre, Référence...) quand un tel champ naturel existe à la création de la table — l'API Airtable ne permet pas de changer le champ primaire après coup.",
+    "6) Pour les tables purement de jonction sans champ texte naturel disponible à la création (Adhésions, Présences, Créneaux, Mouvements matériel), le champ primaire est un autoNumber 'ID ...'.",
+    "Ordre de construction attendu par provision.js : 1) tables + champs de base + champs select, 2) champs de lien (linkFields, avec renommage du champ inverse auto-généré côté table liée), 3) champs formule/lookup (formulaFields/lookupFields, qui référencent des champs de lien donc créés en dernier)."
+  ],
+  "tables": [
+    {
+      "name": "Membres",
+      "primaryField": { "name": "Nom", "type": "singleLineText" },
+      "fields": [
+        { "name": "ID Membre", "type": "autoNumber" },
+        { "name": "Prénom", "type": "singleLineText" },
+        { "name": "Date de naissance", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Lieu de naissance", "type": "singleLineText" },
+        { "name": "Sexe", "type": "singleSelect", "options": { "choices": [ {"name": "Femme"}, {"name": "Homme"}, {"name": "Autre"}, {"name": "Non précisé"} ] } },
+        { "name": "Adresse", "type": "multilineText" },
+        { "name": "Code postal", "type": "singleLineText" },
+        { "name": "Ville", "type": "singleLineText" },
+        { "name": "Email", "type": "email" },
+        { "name": "Téléphone", "type": "phoneNumber" },
+        { "name": "Facebook", "type": "url" },
+        { "name": "Instagram", "type": "url" },
+        { "name": "Contact d'urgence", "type": "multilineText" },
+        { "name": "Photo", "type": "multipleAttachments" },
+        { "name": "Rôle(s) au club", "type": "multipleSelects", "options": { "choices": [ {"name": "Président"}, {"name": "Vice-président"}, {"name": "Trésorier"}, {"name": "Secrétaire"}, {"name": "Entraîneur"}, {"name": "Responsable équipe"}, {"name": "Joueur"}, {"name": "Bénévole"}, {"name": "Communication"}, {"name": "Autre"} ] } },
+        { "name": "Préférences de contact", "type": "multipleSelects", "options": { "choices": [ {"name": "Email"}, {"name": "SMS"}, {"name": "WhatsApp"} ] } },
+        { "name": "Autorisation droit à l'image", "type": "checkbox", "options": { "icon": "check", "color": "greenBright" } },
+        { "name": "Certificat médical / licence", "type": "multipleAttachments" },
+        { "name": "Statut", "type": "singleSelect", "options": { "choices": [ {"name": "Actif"}, {"name": "Inactif"}, {"name": "Ancien"} ] } },
+        { "name": "Notes", "type": "multilineText" }
+      ],
+      "linkFields": []
+    },
+    {
+      "name": "Adhésions",
+      "primaryField": { "name": "ID Adhésion", "type": "autoNumber" },
+      "fields": [
+        { "name": "Saison", "type": "singleSelect", "options": { "choices": [ {"name": "2025/2026"}, {"name": "2026/2027"}, {"name": "2027/2028"} ] } },
+        { "name": "Adhésion Volley Club Mauvezin", "type": "singleSelect", "options": { "choices": [ {"name": "À faire"}, {"name": "En cours"}, {"name": "Validée"}, {"name": "Expirée"} ] } },
+        { "name": "Adhésion Foyer Rural", "type": "singleSelect", "options": { "choices": [ {"name": "À faire"}, {"name": "En cours"}, {"name": "Validée"}, {"name": "Expirée"} ] } },
+        { "name": "Montant cotisation Club (€)", "type": "currency", "options": { "precision": 2, "symbol": "€" } },
+        { "name": "Montant Foyer Rural (€)", "type": "currency", "options": { "precision": 2, "symbol": "€" } },
+        { "name": "Date paiement Club", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Date paiement Foyer Rural", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Mode de paiement", "type": "singleSelect", "options": { "choices": [ {"name": "Espèces"}, {"name": "Chèque"}, {"name": "Virement"}, {"name": "CB"}, {"name": "Autre"} ] } },
+        { "name": "Reçu / facture", "type": "multipleAttachments" },
+        { "name": "Commentaire", "type": "multilineText" }
+      ],
+      "linkFields": [
+        { "name": "Membre", "linkedTable": "Membres", "inverseName": "Adhésions" }
+      ],
+      "formulaFields": [
+        { "name": "Total dû (€)", "type": "formula", "options": { "formula": "{Montant cotisation Club (€)} + {Montant Foyer Rural (€)}" } },
+        { "name": "Statut global", "type": "formula", "options": { "formula": "IF({Adhésion Volley Club Mauvezin} = \"Validée\", IF(OR({Adhésion Foyer Rural} = \"\", {Adhésion Foyer Rural} = \"Validée\"), \"OK\", \"À régulariser\"), \"À régulariser\")" } }
+      ]
+    },
+    {
+      "name": "Événements",
+      "primaryField": { "name": "Nom événement", "type": "singleLineText" },
+      "fields": [
+        { "name": "Type", "type": "singleSelect", "options": { "choices": [ {"name": "Entraînement"}, {"name": "Match/Compétition"}, {"name": "Tournoi"}, {"name": "Repas"}, {"name": "Anniversaire"}, {"name": "Journée des associations"}, {"name": "Démo/Promotion"}, {"name": "Réunion bureau"}, {"name": "Assemblée générale"}, {"name": "Autre"} ] } },
+        { "name": "Interne/Externe", "type": "singleSelect", "options": { "choices": [ {"name": "Interne"}, {"name": "Externe"} ] } },
+        { "name": "Date", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Heure début", "type": "singleLineText" },
+        { "name": "Heure fin", "type": "singleLineText" },
+        { "name": "Description", "type": "multilineText" },
+        { "name": "Statut", "type": "singleSelect", "options": { "choices": [ {"name": "Brouillon"}, {"name": "Publié"}, {"name": "Terminé"}, {"name": "Annulé"} ] } }
+      ],
+      "linkFields": [
+        { "name": "Lieu", "linkedTable": "Lieux", "inverseName": "Événements" },
+        { "name": "Responsable(s)", "linkedTable": "Membres", "inverseName": "Événements (responsable)" },
+        { "name": "Équipe/Groupe concerné", "linkedTable": "Groupes", "inverseName": "Événements" },
+        { "name": "Besoins matériel", "linkedTable": "Matériel", "inverseName": "Événements" }
+      ],
+      "lookupFields": [
+        { "name": "Adresse (lieu)", "sourceLinkField": "Lieu", "sourceField": "Adresse" }
+      ]
+    },
+    {
+      "name": "Présences",
+      "primaryField": { "name": "ID Présence", "type": "autoNumber" },
+      "fields": [
+        { "name": "Statut réponse", "type": "singleSelect", "options": { "choices": [ {"name": "Invité"}, {"name": "Confirmé"}, {"name": "Peut-être"}, {"name": "Refusé"}, {"name": "Non répondu"} ] } },
+        { "name": "Date réponse", "type": "dateTime", "options": { "dateFormat": { "name": "european" }, "timeFormat": { "name": "24hour" }, "timeZone": "client" } },
+        { "name": "Commentaire", "type": "multilineText" },
+        { "name": "Canal d'invitation", "type": "singleSelect", "options": { "choices": [ {"name": "Email"}, {"name": "WhatsApp"}, {"name": "SMS"}, {"name": "Manuel"} ] } },
+        { "name": "Rappel envoyé", "type": "checkbox", "options": { "icon": "check", "color": "greenBright" } }
+      ],
+      "linkFields": [
+        { "name": "Événement", "linkedTable": "Événements", "inverseName": "Présences" },
+        { "name": "Membre", "linkedTable": "Membres", "inverseName": "Présences" }
+      ]
+    },
+    {
+      "name": "Contributions",
+      "primaryField": { "name": "Objet", "type": "singleLineText" },
+      "fields": [
+        { "name": "Catégorie", "type": "singleSelect", "options": { "choices": [ {"name": "Nourriture/boisson"}, {"name": "Matériel"}, {"name": "Transport"}, {"name": "Autre"} ] } },
+        { "name": "Quantité requise", "type": "number", "options": { "precision": 0 } },
+        { "name": "Unité", "type": "singleLineText" },
+        { "name": "Quantité apportée", "type": "number", "options": { "precision": 0 } },
+        { "name": "Notes", "type": "multilineText" }
+      ],
+      "linkFields": [
+        { "name": "Événement", "linkedTable": "Événements", "inverseName": "Contributions" },
+        { "name": "Apporté par", "linkedTable": "Membres", "inverseName": "Contributions (Qui amène quoi)" }
+      ],
+      "formulaFields": [
+        { "name": "Statut", "type": "formula", "options": { "formula": "IF({Quantité apportée} >= {Quantité requise}, \"OK\", \"Manque\")" } }
+      ]
+    },
+    {
+      "name": "Lieux",
+      "primaryField": { "name": "Nom du lieu", "type": "singleLineText" },
+      "fields": [
+        { "name": "Adresse", "type": "multilineText" },
+        { "name": "Ville", "type": "singleLineText" },
+        { "name": "Contact mairie/gestionnaire", "type": "multilineText" },
+        { "name": "Infos accès / code / consignes", "type": "multilineText" },
+        { "name": "Pièces jointes", "type": "multipleAttachments" }
+      ],
+      "linkFields": []
+    },
+    {
+      "name": "Groupes",
+      "primaryField": { "name": "Nom groupe", "type": "singleLineText" },
+      "fields": [
+        { "name": "Niveau", "type": "singleSelect", "options": { "choices": [ {"name": "Débutant"}, {"name": "Intermédiaire"}, {"name": "Avancé"}, {"name": "Compétition"}, {"name": "Loisirs"} ] } }
+      ],
+      "linkFields": [
+        { "name": "Coach / référent", "linkedTable": "Membres", "inverseName": "Groupes (coach)" },
+        { "name": "Membres", "linkedTable": "Membres", "inverseName": "Groupes" }
+      ]
+    },
+    {
+      "name": "Créneaux",
+      "primaryField": { "name": "ID Créneau", "type": "autoNumber" },
+      "fields": [
+        { "name": "Jour", "type": "singleSelect", "options": { "choices": [ {"name": "Lundi"}, {"name": "Mardi"}, {"name": "Mercredi"}, {"name": "Jeudi"}, {"name": "Vendredi"}, {"name": "Samedi"}, {"name": "Dimanche"} ] } },
+        { "name": "Heure début", "type": "singleLineText" },
+        { "name": "Heure fin", "type": "singleLineText" },
+        { "name": "Statut", "type": "singleSelect", "options": { "choices": [ {"name": "Actif"}, {"name": "Suspendu"} ] } },
+        { "name": "Notes", "type": "multilineText" }
+      ],
+      "linkFields": [
+        { "name": "Groupe", "linkedTable": "Groupes", "inverseName": "Créneaux" },
+        { "name": "Lieu", "linkedTable": "Lieux", "inverseName": "Créneaux" }
+      ]
+    },
+    {
+      "name": "Clés",
+      "primaryField": { "name": "Clé / trousseau", "type": "singleLineText" },
+      "fields": [
+        { "name": "Date remise", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Date retour prévue", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Date retour", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Statut", "type": "singleSelect", "options": { "choices": [ {"name": "En circulation"}, {"name": "Rendu"}, {"name": "Perdu"} ] } },
+        { "name": "Commentaire", "type": "multilineText" }
+      ],
+      "linkFields": [
+        { "name": "Lieu", "linkedTable": "Lieux", "inverseName": "Clés" },
+        { "name": "Détenteur actuel", "linkedTable": "Membres", "inverseName": "Clés en cours" }
+      ]
+    },
+    {
+      "name": "Ressources",
+      "primaryField": { "name": "Titre", "type": "singleLineText" },
+      "fields": [
+        { "name": "Type", "type": "singleSelect", "options": { "choices": [ {"name": "Règlement intérieur"}, {"name": "Charte"}, {"name": "Fiche entraînement"}, {"name": "Vidéo"}, {"name": "Astuce"}, {"name": "Règles volley"}, {"name": "Modèle doc"}, {"name": "Autre"} ] } },
+        { "name": "Public", "type": "singleSelect", "options": { "choices": [ {"name": "Bureau"}, {"name": "Entraîneurs"}, {"name": "Tous membres"} ] } },
+        { "name": "Fichier", "type": "multipleAttachments" },
+        { "name": "Lien", "type": "url" },
+        { "name": "Tags", "type": "multipleSelects", "options": { "choices": [ {"name": "Débutant"}, {"name": "Compétition"}, {"name": "Sécurité"}, {"name": "Administratif"}, {"name": "Communication"} ] } },
+        { "name": "Dernière mise à jour", "type": "date", "options": { "dateFormat": { "name": "european" } } }
+      ],
+      "linkFields": [
+        { "name": "Responsable", "linkedTable": "Membres", "inverseName": "Ressources" }
+      ]
+    },
+    {
+      "name": "Publications",
+      "primaryField": { "name": "Titre", "type": "singleLineText" },
+      "fields": [
+        { "name": "Plateforme", "type": "multipleSelects", "options": { "choices": [ {"name": "Facebook"}, {"name": "Instagram"} ] } },
+        { "name": "Date/heure de publication", "type": "dateTime", "options": { "dateFormat": { "name": "european" }, "timeFormat": { "name": "24hour" }, "timeZone": "client" } },
+        { "name": "Statut", "type": "singleSelect", "options": { "choices": [ {"name": "Idée"}, {"name": "À valider"}, {"name": "Planifiée"}, {"name": "Publiée"}, {"name": "Abandonnée"} ] } },
+        { "name": "Contenu", "type": "multilineText" },
+        { "name": "Likes", "type": "number", "options": { "precision": 0 } },
+        { "name": "Commentaires", "type": "number", "options": { "precision": 0 } },
+        { "name": "Partages", "type": "number", "options": { "precision": 0 } }
+      ],
+      "linkFields": [
+        { "name": "Média", "linkedTable": "Galerie", "inverseName": "Publications" },
+        { "name": "Événement lié", "linkedTable": "Événements", "inverseName": "Publications" },
+        { "name": "Responsable com", "linkedTable": "Membres", "inverseName": "Publications" }
+      ]
+    },
+    {
+      "name": "Galerie",
+      "primaryField": { "name": "Titre", "type": "singleLineText" },
+      "fields": [
+        { "name": "Date", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Type", "type": "singleSelect", "options": { "choices": [ {"name": "Photo"}, {"name": "Vidéo"}, {"name": "Affiche"} ] } },
+        { "name": "Fichiers", "type": "multipleAttachments" },
+        { "name": "Droits", "type": "singleSelect", "options": { "choices": [ {"name": "OK"}, {"name": "À vérifier"} ] } },
+        { "name": "Notes", "type": "multilineText" }
+      ],
+      "linkFields": [
+        { "name": "Événement", "linkedTable": "Événements", "inverseName": "Galerie" }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "primaryField": { "name": "ID Transaction", "type": "autoNumber" },
+      "fields": [
+        { "name": "Date", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Type", "type": "singleSelect", "options": { "choices": [ {"name": "Dépense"}, {"name": "Recette"} ] } },
+        { "name": "Catégorie", "type": "singleSelect", "options": { "choices": [ {"name": "Cotisations"}, {"name": "Achats matériel"}, {"name": "Frais fonctionnement"}, {"name": "Déplacements"}, {"name": "Charges"}, {"name": "Subvention"}, {"name": "Sponsor"}, {"name": "Événement"}, {"name": "Autre"} ] } },
+        { "name": "Sous-catégorie", "type": "singleLineText" },
+        { "name": "Montant (€)", "type": "currency", "options": { "precision": 2, "symbol": "€" } },
+        { "name": "Mode paiement", "type": "singleSelect", "options": { "choices": [ {"name": "CB"}, {"name": "Chèque"}, {"name": "Virement"}, {"name": "Espèces"}, {"name": "Autre"} ] } },
+        { "name": "Bénéficiaire / Payeur", "type": "singleLineText" },
+        { "name": "Pièce justificative", "type": "multipleAttachments" },
+        { "name": "Commentaire", "type": "multilineText" }
+      ],
+      "linkFields": [
+        { "name": "Lien sponsor", "linkedTable": "Sponsors", "inverseName": "Transactions liées" },
+        { "name": "Lien subvention", "linkedTable": "Subventions", "inverseName": "Transactions liées" },
+        { "name": "Événement", "linkedTable": "Événements", "inverseName": "Transactions" }
+      ],
+      "formulaFields": [
+        { "name": "Saison", "type": "formula", "options": { "formula": "IF(MONTH({Date}) >= 9, YEAR({Date}) & \"/\" & (YEAR({Date}) + 1), (YEAR({Date}) - 1) & \"/\" & YEAR({Date}))" } }
+      ]
+    },
+    {
+      "name": "Sponsors",
+      "primaryField": { "name": "Nom", "type": "singleLineText" },
+      "fields": [
+        { "name": "Contact", "type": "multilineText" },
+        { "name": "Email", "type": "email" },
+        { "name": "Téléphone", "type": "phoneNumber" },
+        { "name": "Montant engagé (€)", "type": "currency", "options": { "precision": 2, "symbol": "€" } },
+        { "name": "Date", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Contreparties", "type": "multilineText" },
+        { "name": "Logo", "type": "multipleAttachments" },
+        { "name": "Statut", "type": "singleSelect", "options": { "choices": [ {"name": "Prospect"}, {"name": "Actif"}, {"name": "Terminé"} ] } }
+      ],
+      "linkFields": []
+    },
+    {
+      "name": "Subventions",
+      "primaryField": { "name": "Objet", "type": "singleLineText" },
+      "fields": [
+        { "name": "Organisme", "type": "singleLineText" },
+        { "name": "Montant demandé (€)", "type": "currency", "options": { "precision": 2, "symbol": "€" } },
+        { "name": "Montant obtenu (€)", "type": "currency", "options": { "precision": 2, "symbol": "€" } },
+        { "name": "Date demande", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Date réponse", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Statut", "type": "singleSelect", "options": { "choices": [ {"name": "À préparer"}, {"name": "Envoyée"}, {"name": "Acceptée"}, {"name": "Refusée"}, {"name": "En attente"} ] } },
+        { "name": "Dossier", "type": "multipleAttachments" },
+        { "name": "Notes", "type": "multilineText" }
+      ],
+      "linkFields": []
+    },
+    {
+      "name": "Matériel",
+      "primaryField": { "name": "Référence", "type": "singleLineText" },
+      "fields": [
+        { "name": "Catégorie", "type": "singleSelect", "options": { "choices": [ {"name": "Ballon"}, {"name": "Enceinte"}, {"name": "Filet"}, {"name": "Chasubles"}, {"name": "Trousse secours"}, {"name": "Autre"} ] } },
+        { "name": "Marque/modèle", "type": "singleLineText" },
+        { "name": "Quantité totale", "type": "number", "options": { "precision": 0 } },
+        { "name": "État", "type": "singleSelect", "options": { "choices": [ {"name": "Neuf"}, {"name": "Bon"}, {"name": "Moyen"}, {"name": "Usé"}, {"name": "HS"} ] } },
+        { "name": "Valeur estimée (€)", "type": "currency", "options": { "precision": 2, "symbol": "€" } },
+        { "name": "Date achat", "type": "date", "options": { "dateFormat": { "name": "european" } } },
+        { "name": "Lieu de stockage", "type": "singleLineText" },
+        { "name": "Photo", "type": "multipleAttachments" },
+        { "name": "Notes", "type": "multilineText" }
+      ],
+      "linkFields": [],
+      "manualFields": [
+        { "name": "Quantité dispo", "reason": "= Quantité totale - sorties non rendues. Nécessite un rollup sur Mouvements matériel (somme des quantités où Type mouvement != Retour) + un champ formule qui soustrait. Voir GUIDE_VCM_AIRTABLE.md." }
+      ]
+    },
+    {
+      "name": "Mouvements matériel",
+      "primaryField": { "name": "ID Mouvement", "type": "autoNumber" },
+      "fields": [
+        { "name": "Date", "type": "dateTime", "options": { "dateFormat": { "name": "european" }, "timeFormat": { "name": "24hour" }, "timeZone": "client" } },
+        { "name": "Type mouvement", "type": "singleSelect", "options": { "choices": [ {"name": "Prêt"}, {"name": "Retour"}, {"name": "Perte"}, {"name": "Casse"}, {"name": "Achat"}, {"name": "Mise au rebut"} ] } },
+        { "name": "Quantité", "type": "number", "options": { "precision": 0 } },
+        { "name": "Commentaire", "type": "multilineText" },
+        { "name": "Preuve", "type": "multipleAttachments" }
+      ],
+      "linkFields": [
+        { "name": "Matériel", "linkedTable": "Matériel", "inverseName": "Mouvements matériel" },
+        { "name": "Membre concerné", "linkedTable": "Membres", "inverseName": "Mouvements matériel" },
+        { "name": "Événement", "linkedTable": "Événements", "inverseName": "Mouvements matériel" }
+      ]
+    }
+  ]
+}
