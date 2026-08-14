@@ -55,6 +55,11 @@
       "linkFields": [
         { "name": "Membre", "linkedTable": "Membres", "inverseName": "Adhésions" }
       ],
+      "lookupFields": [
+        { "name": "Email membre", "sourceLinkField": "Membre", "sourceField": "Email" },
+        { "name": "Prénom membre", "sourceLinkField": "Membre", "sourceField": "Prénom" },
+        { "name": "Nom membre", "sourceLinkField": "Membre", "sourceField": "Nom" }
+      ],
       "formulaFields": [
         { "name": "Total dû (€)", "type": "formula", "options": { "formula": "{Montant cotisation Club (€)} + {Montant Foyer Rural (€)}" } },
         { "name": "Statut global", "type": "formula", "options": { "formula": "IF({Adhésion Volley Club Mauvezin} = \"Validée\", IF(OR({Adhésion Foyer Rural} = \"\", {Adhésion Foyer Rural} = \"Validée\"), \"OK\", \"À régulariser\"), \"À régulariser\")" } },
