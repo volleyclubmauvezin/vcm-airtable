@@ -191,19 +191,8 @@ async function main() {
     const tableInfo = live[table.name];
     if (!tableInfo) continue;
 
-    for (const f of table.formulaFields || []) {
-      if (tableInfo.fields[f.name]) {
-        console.log(`  ${table.name}.${f.name} existe déjà, on passe.`);
-        continue;
-      }
-      try {
-        console.log(`  ${table.name}.${f.name} (formule)`);
-        await createField(tableInfo.id, { name: f.name, type: f.type, options: f.options });
-      } catch (e) {
-        console.error(`  Échec création formule ${table.name}.${f.name}: ${e.message}`);
-      }
-    }
-
+    // Lookups d'abord : certaines formules (ex. Présences."Rappel J-2 ou J-1") référencent
+    // un champ lookup de la même table — il doit donc déjà exister.
     for (const lk of table.lookupFields || []) {
       if (tableInfo.fields[lk.name]) {
         console.log(`  ${table.name}.${lk.name} existe déjà, on passe.`);
@@ -237,6 +226,19 @@ async function main() {
         });
       } catch (e) {
         console.error(`  Échec création lookup ${table.name}.${lk.name}: ${e.message}`);
+      }
+    }
+
+    for (const f of table.formulaFields || []) {
+      if (tableInfo.fields[f.name]) {
+        console.log(`  ${table.name}.${f.name} existe déjà, on passe.`);
+        continue;
+      }
+      try {
+        console.log(`  ${table.name}.${f.name} (formule)`);
+        await createField(tableInfo.id, { name: f.name, type: f.type, options: f.options });
+      } catch (e) {
+        console.error(`  Échec création formule ${table.name}.${f.name}: ${e.message}`);
       }
     }
   }

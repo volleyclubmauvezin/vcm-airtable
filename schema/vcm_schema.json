@@ -35,7 +35,10 @@
         { "name": "Statut", "type": "singleSelect", "options": { "choices": [ {"name": "Actif"}, {"name": "Inactif"}, {"name": "Ancien"} ] } },
         { "name": "Notes", "type": "multilineText" }
       ],
-      "linkFields": []
+      "linkFields": [],
+      "formulaFields": [
+        { "name": "Anniversaire aujourd'hui", "type": "formula", "options": { "formula": "IF(AND(MONTH({Date de naissance}) = MONTH(TODAY()), DAY({Date de naissance}) = DAY(TODAY())), \"Oui\", \"Non\")" } }
+      ]
     },
     {
       "name": "Adhésions",
@@ -102,8 +105,12 @@
         { "name": "Événement", "linkedTable": "Événements", "inverseName": "Présences" },
         { "name": "Membre", "linkedTable": "Membres", "inverseName": "Présences" }
       ],
+      "lookupFields": [
+        { "name": "Date événement", "sourceLinkField": "Événement", "sourceField": "Date" }
+      ],
       "formulaFields": [
-        { "name": "Libellé", "type": "formula", "options": { "formula": "{Membre} & \" — \" & {Événement}" } }
+        { "name": "Libellé", "type": "formula", "options": { "formula": "{Membre} & \" — \" & {Événement}" } },
+        { "name": "Rappel J-2 ou J-1", "type": "formula", "options": { "formula": "IF(AND({Statut réponse} = \"Non répondu\", OR(IS_SAME({Date événement}, DATEADD(TODAY(), 1, \"days\"), \"day\"), IS_SAME({Date événement}, DATEADD(TODAY(), 2, \"days\"), \"day\"))), \"Oui\", \"Non\")" } }
       ]
     },
     {
