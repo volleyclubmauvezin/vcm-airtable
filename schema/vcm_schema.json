@@ -106,7 +106,10 @@
         { "name": "Membre", "linkedTable": "Membres", "inverseName": "Présences" }
       ],
       "lookupFields": [
-        { "name": "Date événement", "sourceLinkField": "Événement", "sourceField": "Date" }
+        { "name": "Date événement", "sourceLinkField": "Événement", "sourceField": "Date" },
+        { "name": "Email membre", "sourceLinkField": "Membre", "sourceField": "Email" },
+        { "name": "Prénom membre", "sourceLinkField": "Membre", "sourceField": "Prénom" },
+        { "name": "Nom événement (lien)", "sourceLinkField": "Événement", "sourceField": "Nom événement" }
       ],
       "formulaFields": [
         { "name": "Libellé", "type": "formula", "options": { "formula": "{Membre} & \" — \" & {Événement}" } },
