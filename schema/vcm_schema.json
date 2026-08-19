@@ -113,7 +113,7 @@
       ],
       "formulaFields": [
         { "name": "Libellé", "type": "formula", "options": { "formula": "{Membre} & \" — \" & {Événement}" } },
-        { "name": "Rappel J-2 ou J-1", "type": "formula", "options": { "formula": "IF(AND({Statut réponse} = \"Non répondu\", OR(IS_SAME({Date événement}, DATEADD(TODAY(), 1, \"days\"), \"day\"), IS_SAME({Date événement}, DATEADD(TODAY(), 2, \"days\"), \"day\"))), \"Oui\", \"Non\")" } }
+        { "name": "Rappel J-2 ou J-1", "type": "formula", "options": { "formula": "IF(AND(OR({Statut réponse} = \"Invité\", {Statut réponse} = \"Non répondu\", {Statut réponse} = \"Peut-être\"), OR(IS_SAME({Date événement}, DATEADD(TODAY(), 1, \"days\"), \"day\"), IS_SAME({Date événement}, DATEADD(TODAY(), 2, \"days\"), \"day\"))), \"Oui\", \"Non\")" } }
       ]
     },
     {

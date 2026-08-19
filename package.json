@@ -4,6 +4,10 @@
   "version": "1.0.0",
   "description": "Scripts de provisioning et d'import Airtable pour le Volley Club Mauvezin",
   "scripts": {
-    "provision": "node scripts/provision.js"
+    "provision": "node scripts/provision.js",
+    "sync-exif-dates": "node scripts/sync_exif_dates.js"
+  },
+  "dependencies": {
+    "exifr": "^7.1.3"
   }
 }
