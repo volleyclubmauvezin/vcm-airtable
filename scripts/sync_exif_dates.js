@@ -2,11 +2,14 @@
 /**
  * Entretien automatique de la table Galerie, pensé pour tourner via GitHub Actions (cron) :
  *
- * 1. Supprime les doublons exacts (même photo envoyée plusieurs fois, ex. double-clic sur le
+ * 1. Sépare les enregistrements contenant plusieurs photos (le formulaire public accepte un
+ *    envoi groupé, ex. tout un lot de photos de saison depuis un smartphone) en un
+ *    enregistrement par photo, pour que chacune ait sa propre Date et son propre tri.
+ * 2. Supprime les doublons exacts (même photo envoyée plusieurs fois, ex. double-clic sur le
  *    formulaire public) — détectés par hash SHA-256 du contenu du fichier, pas par nom, pour
  *    ne jamais supprimer deux photos différentes qui se ressembleraient. Le plus ancien
  *    enregistrement (createdTime le plus petit) est conservé.
- * 2. Remplit le champ "Date" à partir des métadonnées EXIF (date de prise de vue) des photos
+ * 3. Remplit le champ "Date" à partir des métadonnées EXIF (date de prise de vue) des photos
  *    restantes qui n'ont pas encore de Date renseignée.
  *
  * Contourne le fait que l'action "Exécuter un script" d'Airtable est réservée au forfait
@@ -83,8 +86,63 @@ async function deleteRecords(ids) {
   }
 }
 
+const SHARED_FIELDS_TO_COPY = ["Titre", "Type", "Droits", "Notes", "Événement"];
+
+// Un enregistrement Galerie avec plusieurs pièces jointes (envoi groupé depuis le
+// formulaire) est éclaté en un enregistrement par photo, pour que chacune ait sa propre
+// Date et participe individuellement au tri/dédoublonnage.
+async function explodeMultiAttachmentRecords(records) {
+  let exploded = 0;
+  for (const record of records) {
+    const attachments = record.fields["Fichiers"] || [];
+    if (attachments.length <= 1) continue;
+
+    const [first, ...rest] = attachments;
+    console.log(
+      `  ${record.id} : ${attachments.length} photos dans un seul envoi, séparation en ${attachments.length} enregistrements.`
+    );
+
+    // Airtable n'accepte que {url, filename} en écriture pour une pièce jointe — pas l'objet
+    // complet renvoyé en lecture (id, thumbnails, width, height...).
+    const toNewAttachment = (att) => ({ url: att.url, filename: att.filename });
+
+    const patchRes = await fetch(`${API_ROOT}/Galerie/${record.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ fields: { Fichiers: [toNewAttachment(first)] } }),
+    });
+    if (!patchRes.ok) {
+      console.error(`  ${record.id} : échec réduction à 1 photo -`, patchRes.status, await patchRes.text());
+      continue;
+    }
+
+    const sharedFields = {};
+    for (const key of SHARED_FIELDS_TO_COPY) {
+      if (record.fields[key] !== undefined) sharedFields[key] = record.fields[key];
+    }
+    const newRecords = rest.map((att) => ({ fields: { ...sharedFields, Fichiers: [toNewAttachment(att)] } }));
+    for (let i = 0; i < newRecords.length; i += 10) {
+      const createRes = await fetch(`${API_ROOT}/Galerie`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ records: newRecords.slice(i, i + 10) }),
+      });
+      if (!createRes.ok) {
+        console.error("  Échec création des enregistrements séparés:", createRes.status, await createRes.text());
+      }
+    }
+    exploded += rest.length;
+  }
+  return exploded;
+}
+
 async function main() {
-  const records = await fetchAllGalerieWithPhoto();
+  let records = await fetchAllGalerieWithPhoto();
+  const explodedCount = await explodeMultiAttachmentRecords(records);
+  if (explodedCount > 0) {
+    console.log(`${explodedCount} photo(s) séparée(s) dans leur propre enregistrement.`);
+    records = await fetchAllGalerieWithPhoto(); // reflète les enregistrements après séparation
+  }
   console.log(`${records.length} photo(s) au total à examiner.`);
 
   // Télécharge chaque photo une seule fois, sert à la fois au hash (doublons) et à l'EXIF.
