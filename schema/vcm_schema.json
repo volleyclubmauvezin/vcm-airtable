@@ -37,7 +37,8 @@
       ],
       "linkFields": [],
       "formulaFields": [
-        { "name": "Anniversaire aujourd'hui", "type": "formula", "options": { "formula": "IF(AND(MONTH({Date de naissance}) = MONTH(TODAY()), DAY({Date de naissance}) = DAY(TODAY())), \"Oui\", \"Non\")" } }
+        { "name": "Anniversaire aujourd'hui", "type": "formula", "options": { "formula": "IF(AND(MONTH({Date de naissance}) = MONTH(TODAY()), DAY({Date de naissance}) = DAY(TODAY())), \"Oui\", \"Non\")" } },
+        { "name": "Affichage court", "type": "formula", "options": { "formula": "{Prénom} & \" \" & LEFT({Nom}, 1) & \".\"" } }
       ]
     },
     {
@@ -234,7 +235,11 @@
         { "name": "Notes", "type": "multilineText" }
       ],
       "linkFields": [
-        { "name": "Événement", "linkedTable": "Événements", "inverseName": "Galerie" }
+        { "name": "Événement", "linkedTable": "Événements", "inverseName": "Galerie" },
+        { "name": "Envoyé par", "linkedTable": "Membres", "inverseName": "Galerie (envoyées)" }
+      ],
+      "lookupFields": [
+        { "name": "Envoyé par (affichage)", "sourceLinkField": "Envoyé par", "sourceField": "Affichage court" }
       ]
     },
     {
